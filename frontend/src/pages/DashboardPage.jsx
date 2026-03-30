@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { GoogleGenAI, Modality } from '@google/genai'
+import { Mic, MicOff, PhoneOff, Send, Search } from 'lucide-react'
+
+import TroubleshootingCanvas from '../components/whiteboard/TroubleshootingCanvas'
+import { submitQuery } from '../api/troubleshooting'
+import { getMockGraphData } from '../data/mockGraph'
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY
 const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025'
@@ -25,7 +30,6 @@ async function fetchContext() {
           .catch(() => [])
       )
     )
-    // Deduplicate by text
     const seen = new Set()
     const chunks = results.flat().filter((r) => {
       if (seen.has(r.text)) return false
@@ -34,7 +38,7 @@ async function fetchContext() {
     })
     if (chunks.length === 0) return ''
     return (
-      '\n\n# Uploaded Documents\nUse the following excerpts to answer the technician\'s questions:\n\n' +
+      "\n\n# Uploaded Documents\nUse the following excerpts to answer the technician's questions:\n\n" +
       chunks.map((c) => `[${c.source}]\n${c.text}`).join('\n\n---\n\n')
     )
   } catch {
@@ -42,12 +46,7 @@ async function fetchContext() {
   }
 }
 
-const STATUS = {
-  IDLE: 'idle',
-  CONNECTING: 'connecting',
-  ACTIVE: 'active',
-  ENDING: 'ending',
-}
+const STATUS = { IDLE: 'idle', CONNECTING: 'connecting', ACTIVE: 'active', ENDING: 'ending' }
 
 const SYSTEM_PROMPT = `you are a voice agent to help technicians in factories to solve issues and access manuals faster
 
@@ -76,29 +75,38 @@ If you feel the user wants to end the call but hasn't said a trigger, ask: "Are 
 `
 
 export default function DashboardPage() {
-  useLocation() // keep router context
+  useLocation()
 
-  const geminiSessionRef = useRef(null)
-  const audioCtxRef = useRef(null)
-  const micStreamRef = useRef(null)
-  const processorRef = useRef(null)
-  const nextStartTimeRef = useRef(0)
-  const activeSourcesRef = useRef([])
-  const mutedRef = useRef(false)
-  const statusRef = useRef(STATUS.IDLE)
-  const startCallRef = useRef(null)
-  const transcriptEndRef = useRef(null)
-  const wakeWordRef = useRef(null)
+  // ── Voice / Gemini refs ────────────────────────────────────────────────────
+  const geminiSessionRef   = useRef(null)
+  const audioCtxRef        = useRef(null)
+  const micStreamRef       = useRef(null)
+  const processorRef       = useRef(null)
+  const nextStartTimeRef   = useRef(0)
+  const activeSourcesRef   = useRef([])
+  const mutedRef           = useRef(false)
+  const statusRef          = useRef(STATUS.IDLE)
+  const startCallRef       = useRef(null)
+  const transcriptEndRef   = useRef(null)
+  const wakeWordRef        = useRef(null)
 
-  const [status, setStatus] = useState(STATUS.IDLE)
-  const [isMuted, setIsMuted] = useState(false)
-  const [volumeLevel, setVolumeLevel] = useState(0)
-  const [transcript, setTranscript] = useState([])
+  // ── Voice / Gemini state ───────────────────────────────────────────────────
+  const [status, setStatus]               = useState(STATUS.IDLE)
+  const [isMuted, setIsMuted]             = useState(false)
+  const [volumeLevel, setVolumeLevel]     = useState(0)
+  const [transcript, setTranscript]       = useState([])
   const [wakeWordActive, setWakeWordActive] = useState(false)
 
+  // ── Whiteboard / graph state ───────────────────────────────────────────────
+  const [problem, setProblem]       = useState('')
+  const [graphData, setGraphData]   = useState(null)
+  const [isQuerying, setIsQuerying] = useState(false)
+  const [queryInput, setQueryInput] = useState('')
+
+  // ── Cleanup on unmount ─────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      try { geminiSessionRef.current?.close() } catch {}
+      try { geminiSessionRef.current?.close() } catch { /* noop */ }
       micStreamRef.current?.getTracks().forEach((t) => t.stop())
       audioCtxRef.current?.close()
     }
@@ -108,10 +116,9 @@ export default function DashboardPage() {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [transcript])
 
+  // ── Audio helpers ──────────────────────────────────────────────────────────
   const flushAudio = useCallback(() => {
-    for (const src of activeSourcesRef.current) {
-      try { src.stop() } catch {}
-    }
+    for (const src of activeSourcesRef.current) { try { src.stop() } catch { /* noop */ } }
     activeSourcesRef.current = []
     nextStartTimeRef.current = 0
     setVolumeLevel(0)
@@ -120,30 +127,23 @@ export default function DashboardPage() {
   const enqueueAudio = useCallback((b64) => {
     const ctx = audioCtxRef.current
     if (!ctx) return
-
     const raw = atob(b64)
     const int16 = new Int16Array(raw.length / 2)
-    for (let i = 0; i < int16.length; i++) {
+    for (let i = 0; i < int16.length; i++)
       int16[i] = raw.charCodeAt(i * 2) | (raw.charCodeAt(i * 2 + 1) << 8)
-    }
-
     let sum = 0
     for (let i = 0; i < int16.length; i++) sum += (int16[i] / 32768) ** 2
     setVolumeLevel(Math.min(Math.sqrt(sum / int16.length) * 4, 1))
-
     const float32 = new Float32Array(int16.length)
     for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768
-
     const buf = ctx.createBuffer(1, float32.length, 24000)
     buf.getChannelData(0).set(float32)
     const src = ctx.createBufferSource()
     src.buffer = buf
     src.connect(ctx.destination)
-
     const now = ctx.currentTime
     const startAt = Math.max(nextStartTimeRef.current, now)
     nextStartTimeRef.current = startAt + buf.duration
-
     src.onended = () => {
       activeSourcesRef.current = activeSourcesRef.current.filter((s) => s !== src)
       if (activeSourcesRef.current.length === 0) setVolumeLevel(0)
@@ -172,7 +172,7 @@ export default function DashboardPage() {
   const endCall = useCallback(() => {
     statusRef.current = STATUS.ENDING
     setStatus(STATUS.ENDING)
-    try { geminiSessionRef.current?.close() } catch {}
+    try { geminiSessionRef.current?.close() } catch { /* noop */ }
     geminiSessionRef.current = null
     micStreamRef.current?.getTracks().forEach((t) => t.stop())
     micStreamRef.current = null
@@ -198,14 +198,11 @@ export default function DashboardPage() {
         audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
       })
       micStreamRef.current = stream
-
       const micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 })
       await micCtx.audioWorklet.addModule('/pcm-processor.js')
-
       const source = micCtx.createMediaStreamSource(stream)
       const workletNode = new AudioWorkletNode(micCtx, 'pcm-processor')
       processorRef.current = { node: workletNode, context: micCtx }
-
       workletNode.port.onmessage = (e) => {
         if (mutedRef.current) return
         const session = geminiSessionRef.current
@@ -215,16 +212,11 @@ export default function DashboardPage() {
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
         try {
           session.sendRealtimeInput({ audio: { data: btoa(binary), mimeType: 'audio/pcm;rate=16000' } })
-        } catch (err) {
-          console.error('[Mic] Send error:', err.message)
-        }
+        } catch (err) { console.error('[Mic] Send error:', err.message) }
       }
-
       source.connect(workletNode)
       workletNode.connect(micCtx.destination)
-    } catch (err) {
-      console.error('Mic capture error:', err)
-    }
+    } catch (err) { console.error('Mic capture error:', err) }
   }
 
   const startCall = async () => {
@@ -234,8 +226,7 @@ export default function DashboardPage() {
     setTranscript([])
     mutedRef.current = false
     setIsMuted(false)
-
-    try { geminiSessionRef.current?.close() } catch {}
+    try { geminiSessionRef.current?.close() } catch { /* noop */ }
     geminiSessionRef.current = null
     micStreamRef.current?.getTracks().forEach((t) => t.stop())
     micStreamRef.current = null
@@ -248,22 +239,17 @@ export default function DashboardPage() {
     audioCtxRef.current = null
     activeSourcesRef.current = []
     nextStartTimeRef.current = 0
-
     const userContext = await fetchContext()
     const systemPrompt = SYSTEM_PROMPT + userContext
-
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 })
     audioCtxRef.current = audioCtx
-
     if (!geminiClient) {
       console.error('VITE_GEMINI_API_KEY not set')
       statusRef.current = STATUS.IDLE
       setStatus(STATUS.IDLE)
       return
     }
-
     let setupDone = false
-
     try {
       const session = await geminiClient.live.connect({
         model: GEMINI_MODEL,
@@ -286,12 +272,9 @@ export default function DashboardPage() {
               startMicCapture()
               return
             }
-
             const sc = msg.serverContent
             if (!sc) return
-
             if (sc.interrupted) { flushAudio(); return }
-
             if (sc.modelTurn?.parts) {
               setTranscript((prev) =>
                 prev.map((e) => (e.role === 'user' && e.streaming) ? { ...e, streaming: false } : e)
@@ -300,47 +283,34 @@ export default function DashboardPage() {
                 if (part.inlineData?.mimeType?.startsWith('audio/pcm')) enqueueAudio(part.inlineData.data)
               }
             }
-
             if (sc.inputTranscription?.text) {
               const text = sc.inputTranscription.text
               if (text.trim()) {
                 setTranscript((prev) => {
                   const last = prev[prev.length - 1]
-                  if (last && last.role === 'user' && last.streaming) {
+                  if (last && last.role === 'user' && last.streaming)
                     return [...prev.slice(0, -1), { role: 'user', text: last.text + text, streaming: true }]
-                  }
                   return [...prev, { role: 'user', text, streaming: true }]
                 })
-
                 const spoken = text.toLowerCase()
-                const END_PHRASES = [
-                  'hang up', 'goodbye', 'good bye', 'bye bye',
-                  'bye bruno', "i'm done", "i'm done for today", "we're done", 'thanks bye',
-                ]
-                const isExactBye = spoken.trim() === 'bye'
-                if (isExactBye || END_PHRASES.some((p) => spoken.includes(p))) endCall()
+                const END_PHRASES = ['hang up', 'goodbye', 'good bye', 'bye bye', 'bye bruno', "i'm done", "we're done", 'thanks bye']
+                if (spoken.trim() === 'bye' || END_PHRASES.some((p) => spoken.includes(p))) endCall()
               }
             }
-
             if (sc.outputTranscription?.text) {
               const text = sc.outputTranscription.text.trim()
               if (text) {
                 setTranscript((prev) => {
-                  const finalized = prev.map((e) =>
-                    (e.role === 'user' && e.streaming) ? { ...e, streaming: false } : e
-                  )
+                  const finalized = prev.map((e) => (e.role === 'user' && e.streaming) ? { ...e, streaming: false } : e)
                   const last = finalized[finalized.length - 1]
                   if (last && last.role === 'assistant' && last.streaming) {
-                    const joined = last.text.endsWith(' ') || text.startsWith(' ')
-                      ? last.text + text
-                      : last.text + ' ' + text
+                    const joined = last.text.endsWith(' ') || text.startsWith(' ') ? last.text + text : last.text + ' ' + text
                     return [...finalized.slice(0, -1), { role: 'assistant', text: joined, streaming: true }]
                   }
                   return [...finalized, { role: 'assistant', text, streaming: true }]
                 })
               }
             }
-
             if (sc.turnComplete) {
               setVolumeLevel(0)
               setTranscript((prev) => prev.map((e) => (e.streaming ? { ...e, streaming: false } : e)))
@@ -350,7 +320,6 @@ export default function DashboardPage() {
           onclose: () => { console.log('[Gemini] Session closed'); cleanupCall() },
         },
       })
-
       geminiSessionRef.current = session
       session.sendClientContent({
         turns: [{ role: 'user', parts: [{ text: 'A factory technician just connected. Greet them and ask how you can help.' }] }],
@@ -366,22 +335,16 @@ export default function DashboardPage() {
   }
   startCallRef.current = startCall
 
-  // Wake word — "Hey Bruno"
+  // ── Wake word ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) return
-
     if (status !== STATUS.IDLE) {
-      if (wakeWordRef.current) {
-        try { wakeWordRef.current.stop() } catch {}
-        wakeWordRef.current = null
-      }
+      if (wakeWordRef.current) { try { wakeWordRef.current.stop() } catch { /* noop */ }; wakeWordRef.current = null }
       setWakeWordActive(false)
       return
     }
-
     let cancelled = false
-
     function startListening() {
       if (cancelled) return
       const rec = new SpeechRecognition()
@@ -389,20 +352,13 @@ export default function DashboardPage() {
       rec.interimResults = true
       rec.lang = 'en-US'
       rec.maxAlternatives = 5
-
       rec.onstart = () => setWakeWordActive(true)
       rec.onresult = (event) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const alts = Array.from(event.results[i]).map((a) => a.transcript.toLowerCase())
-          const triggered = alts.some((t) =>
-            t.includes('hey bruno') ||
-            t.includes('hey bru no') ||
-            t.includes('hey brno') ||
-            t.includes('a bruno')
-          )
-          if (triggered) {
+          if (alts.some((t) => t.includes('hey bruno') || t.includes('hey bru no') || t.includes('hey brno') || t.includes('a bruno'))) {
             cancelled = true
-            try { rec.stop() } catch {}
+            try { rec.stop() } catch { /* noop */ }
             startCallRef.current?.()
             return
           }
@@ -410,23 +366,21 @@ export default function DashboardPage() {
       }
       rec.onend = () => { setWakeWordActive(false); if (!cancelled) setTimeout(startListening, 300) }
       rec.onerror = () => {}
-
       wakeWordRef.current = rec
-      try { rec.start() } catch {}
+      try { rec.start() } catch { /* noop */ }
     }
-
     startListening()
     return () => {
       cancelled = true
-      if (wakeWordRef.current) { try { wakeWordRef.current.stop() } catch {}; wakeWordRef.current = null }
+      if (wakeWordRef.current) { try { wakeWordRef.current.stop() } catch { /* noop */ }; wakeWordRef.current = null }
       setWakeWordActive(false)
     }
   }, [status])
 
-  // Spacebar shortcut
+  // ── Spacebar shortcut ──────────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === ' ' && statusRef.current === STATUS.IDLE) {
+      if (e.key === ' ' && statusRef.current === STATUS.IDLE && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
         e.preventDefault()
         startCallRef.current?.()
       }
@@ -441,213 +395,203 @@ export default function DashboardPage() {
     setIsMuted(next)
   }, [])
 
-  const isCallActive = status === STATUS.ACTIVE
-  const isConnecting = status === STATUS.CONNECTING
-  const isEnding = status === STATUS.ENDING
-  const hasStarted = isCallActive || isConnecting || isEnding
+  // ── Text query handler ─────────────────────────────────────────────────────
+  const handleQuery = useCallback(async (text) => {
+    const trimmed = text.trim()
+    if (!trimmed || isQuerying) return
+    setIsQuerying(true)
+    setProblem(trimmed)
+    setQueryInput('')
+    try {
+      const result = await submitQuery({ problem: trimmed, sessionId: `sess-${Date.now()}`, machineId: 'auto' })
+      setGraphData(result.graph)
+    } catch {
+      // Backend unavailable — use mock data
+      await new Promise((r) => setTimeout(r, 1400))
+      const mock = getMockGraphData(trimmed)
+      setGraphData(mock.graph)
+    } finally {
+      setIsQuerying(false)
+    }
+  }, [isQuerying])
 
-  const barCount = 24
+  const handleQuerySubmit = (e) => {
+    e.preventDefault()
+    handleQuery(queryInput)
+  }
+
+  // ── Derived state ──────────────────────────────────────────────────────────
+  const isCallActive  = status === STATUS.ACTIVE
+  const isConnecting  = status === STATUS.CONNECTING
+  const isEnding      = status === STATUS.ENDING
+  const hasStarted    = isCallActive || isConnecting || isEnding
+
+  const barCount = 20
   const bars = Array.from({ length: barCount }, (_, i) => {
     const center = barCount / 2
     const distFromCenter = Math.abs(i - center) / center
     const baseHeight = (1 - distFromCenter * 0.6) * 100
     const active = volumeLevel > 0.05
-    const randomFactor = active ? 0.4 + Math.random() * 0.6 : 0.15
+    const randomFactor = active ? 0.4 + Math.random() * 0.6 : 0.12
     return { height: baseHeight * randomFactor }
   })
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen dashboard-bg flex flex-col">
-      {/* Header */}
-      <header className="relative z-10 flex items-center justify-between px-8 py-5">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-100 to-sky-100 flex items-center justify-center text-lg shadow-sm">
-            🔧
-          </div>
-          <span className="text-gray-800 font-semibold text-lg">Bruno</span>
-        </div>
-        <p className="text-gray-400 text-sm">TRACTIAN Field Assistant</p>
-      </header>
+    <div className="flex h-screen overflow-hidden bg-[#F2F4F8]">
 
-      {/* Main */}
-      <main className="relative z-10 flex-1 flex items-center justify-center px-6 py-8">
-        <div className="w-full max-w-xl">
-          <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-sm border border-white/60 overflow-hidden">
+      {/* ── LEFT PANEL ──────────────────────────────────────────────────── */}
+      <aside className="w-[232px] flex-shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
 
-            {/* Idle state */}
-            {!hasStarted && (
-              <div className="flex flex-col items-center py-14 px-8 animate-fade-in">
-                <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mb-5">
-                  <div className="w-14 h-14 rounded-full bg-blue-100/70 flex items-center justify-center">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      <line x1="12" y1="19" x2="12" y2="23" />
-                      <line x1="8" y1="23" x2="16" y2="23" />
-                    </svg>
+        {/* Voice visualization */}
+        <div className="relative h-44 overflow-hidden flex-shrink-0">
+          {!hasStarted ? (
+            /* Idle: gradient blob */
+            <>
+              <div className="voice-blob-1" />
+              <div className="voice-blob-2" />
+              <div className="voice-blob-3" />
+              {/* Listening indicator */}
+              <div className="absolute bottom-3 left-0 right-0 flex justify-center">
+                {wakeWordActive ? (
+                  <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-sm border border-white">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                    </span>
+                    <span className="text-[11px] text-gray-600 font-medium">
+                      Listening for <span className="text-blue-600">"Hey Bruno"</span>
+                    </span>
                   </div>
-                </div>
-
-                <h2 className="text-xl font-semibold text-gray-800 mb-2">Ready to help</h2>
-                <p className="text-gray-500 text-sm mb-3 text-center max-w-sm leading-relaxed">
-                  Bruno can diagnose issues, walk through procedures, and help you access manuals — all by voice.
-                </p>
-
-                <p className="text-gray-400 text-xs mb-6 text-center">
-                  Press <span className="text-sky-500 font-medium">space</span>, tap below, or say{' '}
-                  <span className="text-blue-500 font-medium">"Hey Bruno"</span> to begin.
-                </p>
-
-                <button
-                  onClick={startCall}
-                  className="px-10 py-4 rounded-full bg-gradient-to-r from-blue-500 to-sky-500 text-white font-semibold text-base shadow-lg shadow-blue-500/25 hover:brightness-105 active:scale-95 transition-all duration-200"
-                >
-                  Start Conversation
-                </button>
-
-                <div className="mt-5 flex items-center gap-2">
-                  {wakeWordActive ? (
-                    <>
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-                      </span>
-                      <span className="text-blue-500 text-xs">
-                        Listening for <span className="font-medium">"Hey Bruno"</span>…
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-gray-400 text-xs">Wake word not available in this browser</span>
-                  )}
-                </div>
-
-                <p className="text-gray-400 text-xs mt-4">
-                  Say <span className="text-red-400 font-medium">"bye bye"</span> to end the conversation
-                </p>
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-sm border border-white">
+                    <span className="w-2 h-2 rounded-full bg-gray-300" />
+                    <span className="text-[11px] text-gray-400">Wake word unavailable</span>
+                  </div>
+                )}
               </div>
-            )}
-
-            {/* Active / Connecting state */}
-            {hasStarted && (
-              <div className="flex flex-col animate-fade-in">
-                <div className="px-6 pt-6 pb-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          isCallActive
-                            ? 'bg-green-400 animate-pulse'
-                            : isConnecting
-                            ? 'bg-sky-400 animate-pulse'
-                            : 'bg-gray-400 animate-pulse'
-                        }`}
-                      />
-                      <span className="text-xs text-gray-500 font-medium">
-                        {isConnecting && 'Connecting…'}
-                        {isCallActive && (isMuted ? 'Muted' : 'Listening…')}
-                        {isEnding && 'Ending…'}
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={toggleMute}
-                        disabled={!isCallActive}
-                        className={`
-                          p-2 rounded-lg text-xs transition-all
-                          ${isMuted
-                            ? 'bg-sky-50 text-sky-500'
-                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200/70'
-                          }
-                          disabled:opacity-40
-                        `}
-                        aria-label={isMuted ? 'Unmute' : 'Mute'}
-                      >
-                        {isMuted ? (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="1" y1="1" x2="23" y2="23" />
-                            <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                            <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .87-.16 1.7-.44 2.47" />
-                            <line x1="12" y1="19" x2="12" y2="23" />
-                            <line x1="8" y1="23" x2="16" y2="23" />
-                          </svg>
-                        ) : (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                            <line x1="12" y1="19" x2="12" y2="23" />
-                            <line x1="8" y1="23" x2="16" y2="23" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={endCall}
-                        disabled={!isCallActive}
-                        className="p-2 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 transition-all disabled:opacity-40"
-                        aria-label="End call"
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
-                          <line x1="23" y1="1" x2="1" y2="23" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Waveform */}
-                  <div className="flex items-center justify-center gap-[3px] h-16 px-4">
-                    {bars.map((bar, i) => (
-                      <div
-                        key={i}
-                        style={{ height: `${Math.max(bar.height, 8)}%`, transition: 'height 0.15s ease' }}
-                        className={`w-1 rounded-full ${
-                          isCallActive && volumeLevel > 0.05 ? 'bg-blue-400' : 'bg-blue-100'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Transcript */}
-                <div className="border-t border-blue-100/60">
-                  <div className="px-6 py-3">
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Conversation</p>
-                  </div>
-                  <div className="px-6 pb-6 max-h-96 overflow-y-auto flex flex-col gap-3 scroll-smooth">
-                    {transcript.length === 0 && (
-                      <p className="text-gray-400 text-sm text-center py-8">
-                        {isConnecting ? 'Connecting to Bruno…' : 'Conversation will appear here…'}
-                      </p>
-                    )}
-                    {transcript.map((entry, i) => (
-                      <div
-                        key={i}
-                        className={`flex ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`
-                            max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed
-                            ${entry.role === 'user'
-                              ? 'bg-blue-500 text-white rounded-br-md'
-                              : 'bg-white/80 text-gray-700 border border-blue-100 rounded-bl-md'
-                            }
-                          `}
-                        >
-                          {entry.text}
-                        </div>
-                      </div>
-                    ))}
-                    <div ref={transcriptEndRef} />
-                  </div>
+            </>
+          ) : (
+            /* Active: waveform */
+            <div className="h-full flex flex-col items-center justify-center gap-2 px-4">
+              <div className="flex items-center justify-center gap-[3px] h-14 w-full">
+                {bars.map((bar, i) => (
+                  <div
+                    key={i}
+                    style={{ height: `${Math.max(bar.height, 8)}%`, transition: 'height 0.15s ease' }}
+                    className={`w-1 rounded-full ${
+                      isCallActive && volumeLevel > 0.05 ? 'bg-blue-400' : 'bg-blue-100'
+                    }`}
+                  />
+                ))}
+              </div>
+              {/* Status + controls */}
+              <div className="flex items-center gap-2">
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  isCallActive ? 'bg-green-400 animate-pulse' :
+                  isConnecting ? 'bg-sky-400 animate-pulse' : 'bg-gray-400 animate-pulse'
+                }`} />
+                <span className="text-[11px] text-gray-500 font-medium">
+                  {isConnecting && 'Connecting…'}
+                  {isCallActive && (isMuted ? 'Muted' : 'Listening…')}
+                  {isEnding && 'Ending…'}
+                </span>
+                <div className="flex gap-1 ml-auto">
+                  <button
+                    onClick={toggleMute}
+                    disabled={!isCallActive}
+                    className={`p-1.5 rounded-lg text-xs transition-all disabled:opacity-40 ${
+                      isMuted ? 'bg-sky-50 text-sky-500' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isMuted ? <MicOff size={13} /> : <Mic size={13} />}
+                  </button>
+                  <button
+                    onClick={endCall}
+                    disabled={!isCallActive}
+                    className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 transition-all disabled:opacity-40"
+                  >
+                    <PhoneOff size={13} />
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
+
+        {/* Transcript */}
+        <div className="flex-1 overflow-y-auto min-h-0 border-t border-gray-100">
+          {!hasStarted ? (
+            /* Idle — start button */
+            <div className="flex flex-col items-center justify-center h-full px-4 gap-3 py-6">
+              <button
+                onClick={startCall}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-sky-500 text-white text-xs font-semibold shadow-md shadow-blue-500/20 hover:brightness-105 active:scale-95 transition-all"
+              >
+                Start Voice Session
+              </button>
+              <p className="text-[10px] text-gray-400 text-center">
+                Press <span className="text-sky-500 font-medium">space</span> or say{' '}
+                <span className="text-blue-500 font-medium">"Hey Bruno"</span>
+              </p>
+              <p className="text-[10px] text-gray-400 text-center">
+                Say <span className="text-red-400 font-medium">"bye bye"</span> to end
+              </p>
+            </div>
+          ) : (
+            <div className="px-3 py-3 space-y-2">
+              {transcript.length === 0 && (
+                <p className="text-[11px] text-gray-400 text-center py-4">
+                  {isConnecting ? 'Connecting to Bruno…' : 'Conversation will appear here…'}
+                </p>
+              )}
+              {transcript.map((entry, i) => (
+                <div key={i} className={`flex ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] px-2.5 py-2 rounded-xl text-[11px] leading-relaxed ${
+                    entry.role === 'user'
+                      ? 'bg-blue-500 text-white rounded-br-sm'
+                      : 'bg-gray-50 text-gray-700 border border-gray-100 rounded-bl-sm'
+                  }`}>
+                    {entry.text}
+                  </div>
+                </div>
+              ))}
+              <div ref={transcriptEndRef} />
+            </div>
+          )}
+        </div>
+
+        {/* Text query input */}
+        <div className="flex-shrink-0 border-t border-gray-100 p-3">
+          <form onSubmit={handleQuerySubmit} className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              placeholder="Describe a problem…"
+              disabled={isQuerying}
+              className="w-full pl-8 pr-8 py-2 text-xs bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-300 focus:bg-white transition-all disabled:opacity-50 placeholder-gray-400 text-gray-700"
+            />
+            <button
+              type="submit"
+              disabled={!queryInput.trim() || isQuerying}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-600 disabled:opacity-30 transition-colors"
+            >
+              <Send size={12} />
+            </button>
+          </form>
+        </div>
+      </aside>
+
+      {/* ── RIGHT CANVAS ──────────────────────────────────────────────────── */}
+      <main className="flex-1 min-w-0 h-full">
+        <TroubleshootingCanvas
+          problem={problem}
+          graphData={graphData}
+          isQuerying={isQuerying}
+        />
       </main>
-
-      <footer className="relative z-10 text-center py-4 border-t border-blue-100/60 bg-white/30 backdrop-blur-sm">
-        <p className="text-gray-400 text-xs">TRACTIAN — Powered by Gemini Live</p>
-      </footer>
     </div>
   )
 }
