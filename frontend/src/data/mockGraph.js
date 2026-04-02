@@ -2,13 +2,12 @@
  * Mock graph response — mirrors the shape that the backend /query endpoint will return.
  * Used during development and as a fallback when the API is unavailable.
  *
- * Node types: 'actionNode' | 'manualNode' | 'caseNode'
+ * Node types: 'actionNode' | 'manualNode' | 'caseNode' | 'deviceNode'
  */
 
 export function getMockGraphData(problem = '') {
   const lower = problem.toLowerCase()
 
-  // Pick a scenario based on keywords in the problem description
   if (lower.includes('vibrat') || lower.includes('bearing')) {
     return bearingVibrationScenario(problem)
   }
@@ -16,9 +15,20 @@ export function getMockGraphData(problem = '') {
     return hydraulicLeakScenario(problem)
   }
 
-  // Default: overheating / belt scenario
   return overheatBeltScenario(problem)
 }
+
+// Shared edge style helpers
+const dashedEdge = (id, source, target, extra = {}) => ({
+  id,
+  source,
+  target,
+  type: 'smoothstep',
+  animated: false,
+  style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '6 4' },
+  markerEnd: { type: 'arrowclosed', color: '#94a3b8', width: 14, height: 14 },
+  ...extra,
+})
 
 // ─── Scenario 1: Overheating / Belt ─────────────────────────────────────────
 
@@ -31,7 +41,7 @@ function overheatBeltScenario(problem) {
         {
           id: 'action-1',
           type: 'actionNode',
-          position: { x: 420, y: 60 },
+          position: { x: 360, y: 100 },
           data: {
             title: "Bruno's Final Recommendation",
             reasoning:
@@ -57,7 +67,7 @@ function overheatBeltScenario(problem) {
         {
           id: 'manual-1',
           type: 'manualNode',
-          position: { x: 30, y: 260 },
+          position: { x: 20, y: 280 },
           data: {
             title: 'Supporting Manual Extract',
             confidence: 87,
@@ -75,7 +85,7 @@ function overheatBeltScenario(problem) {
         {
           id: 'case-1',
           type: 'caseNode',
-          position: { x: 860, y: 260 },
+          position: { x: 760, y: 420 },
           data: {
             title: 'Past Maintenance Case',
             confidence: 81,
@@ -91,26 +101,20 @@ function overheatBeltScenario(problem) {
               'Identical failure pattern with NF-83C pulley recorded six months prior; resolved by belt retension. No component replacement required.',
           },
         },
+        {
+          id: 'device-1',
+          type: 'deviceNode',
+          position: { x: 860, y: 80 },
+          data: {
+            analysis:
+              'Unusual thermal signature detected. Temperature at belt contact point 18 °C above baseline. Consistent with friction-induced heat from belt slippage.',
+          },
+        },
       ],
       edges: [
-        {
-          id: 'e-manual-action',
-          source: 'manual-1',
-          target: 'action-1',
-          type: 'smoothstep',
-          animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '6 4' },
-          markerEnd: { type: 'arrowclosed', color: '#94a3b8', width: 14, height: 14 },
-        },
-        {
-          id: 'e-case-action',
-          source: 'case-1',
-          target: 'action-1',
-          type: 'smoothstep',
-          animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '6 4' },
-          markerEnd: { type: 'arrowclosed', color: '#94a3b8', width: 14, height: 14 },
-        },
+        dashedEdge('e-manual-action', 'manual-1', 'action-1'),
+        dashedEdge('e-case-action', 'case-1', 'action-1'),
+        dashedEdge('e-action-device', 'action-1', 'device-1'),
       ],
     },
   }
@@ -127,7 +131,7 @@ function bearingVibrationScenario(problem) {
         {
           id: 'action-1',
           type: 'actionNode',
-          position: { x: 420, y: 60 },
+          position: { x: 360, y: 100 },
           data: {
             title: "Bruno's Final Recommendation",
             reasoning:
@@ -153,7 +157,7 @@ function bearingVibrationScenario(problem) {
         {
           id: 'manual-1',
           type: 'manualNode',
-          position: { x: 30, y: 260 },
+          position: { x: 20, y: 280 },
           data: {
             title: 'Supporting Manual Extract',
             confidence: 91,
@@ -171,7 +175,7 @@ function bearingVibrationScenario(problem) {
         {
           id: 'case-1',
           type: 'caseNode',
-          position: { x: 860, y: 260 },
+          position: { x: 760, y: 420 },
           data: {
             title: 'Past Maintenance Case',
             confidence: 88,
@@ -187,26 +191,20 @@ function bearingVibrationScenario(problem) {
               'Same bearing model failed identically on Line 3 motor six weeks earlier; root cause was extended grease interval. Maintenance schedule updated.',
           },
         },
+        {
+          id: 'device-1',
+          type: 'deviceNode',
+          position: { x: 860, y: 80 },
+          data: {
+            analysis:
+              'High-frequency vibration spike at 84 Hz detected. Amplitude 5.8 mm/s RMS — exceeds critical threshold. Pattern consistent with inner race bearing wear.',
+          },
+        },
       ],
       edges: [
-        {
-          id: 'e-manual-action',
-          source: 'manual-1',
-          target: 'action-1',
-          type: 'smoothstep',
-          animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '6 4' },
-          markerEnd: { type: 'arrowclosed', color: '#94a3b8', width: 14, height: 14 },
-        },
-        {
-          id: 'e-case-action',
-          source: 'case-1',
-          target: 'action-1',
-          type: 'smoothstep',
-          animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '6 4' },
-          markerEnd: { type: 'arrowclosed', color: '#94a3b8', width: 14, height: 14 },
-        },
+        dashedEdge('e-manual-action', 'manual-1', 'action-1'),
+        dashedEdge('e-case-action', 'case-1', 'action-1'),
+        dashedEdge('e-action-device', 'action-1', 'device-1'),
       ],
     },
   }
@@ -223,7 +221,7 @@ function hydraulicLeakScenario(problem) {
         {
           id: 'action-1',
           type: 'actionNode',
-          position: { x: 420, y: 60 },
+          position: { x: 360, y: 100 },
           data: {
             title: "Bruno's Final Recommendation",
             reasoning:
@@ -249,7 +247,7 @@ function hydraulicLeakScenario(problem) {
         {
           id: 'manual-1',
           type: 'manualNode',
-          position: { x: 30, y: 260 },
+          position: { x: 20, y: 280 },
           data: {
             title: 'Supporting Manual Extract',
             confidence: 93,
@@ -267,7 +265,7 @@ function hydraulicLeakScenario(problem) {
         {
           id: 'case-1',
           type: 'caseNode',
-          position: { x: 860, y: 260 },
+          position: { x: 760, y: 420 },
           data: {
             title: 'Past Maintenance Case',
             confidence: 79,
@@ -283,26 +281,20 @@ function hydraulicLeakScenario(problem) {
               'Contamination root cause traced to worn reservoir breather filter. Breather replaced and fluid analysis now scheduled quarterly.',
           },
         },
+        {
+          id: 'device-1',
+          type: 'deviceNode',
+          position: { x: 860, y: 80 },
+          data: {
+            analysis:
+              'Pressure drop of 4.2 bar/min detected on cylinder circuit. Fluid level sensor reading 11 % below nominal. Leak rate consistent with rod seal failure.',
+          },
+        },
       ],
       edges: [
-        {
-          id: 'e-manual-action',
-          source: 'manual-1',
-          target: 'action-1',
-          type: 'smoothstep',
-          animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '6 4' },
-          markerEnd: { type: 'arrowclosed', color: '#94a3b8', width: 14, height: 14 },
-        },
-        {
-          id: 'e-case-action',
-          source: 'case-1',
-          target: 'action-1',
-          type: 'smoothstep',
-          animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '6 4' },
-          markerEnd: { type: 'arrowclosed', color: '#94a3b8', width: 14, height: 14 },
-        },
+        dashedEdge('e-manual-action', 'manual-1', 'action-1'),
+        dashedEdge('e-case-action', 'case-1', 'action-1'),
+        dashedEdge('e-action-device', 'action-1', 'device-1'),
       ],
     },
   }
