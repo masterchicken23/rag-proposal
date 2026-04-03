@@ -1,9 +1,7 @@
 import { X, FileText, BookOpen, ClipboardList, AlertCircle, Lightbulb, Wrench, ExternalLink } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
-export default function NodeModal({ node, onClose }) {
-  const { type, data } = node
-
+function PdfViewerModal({ url, onClose }) {
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handleKey)
@@ -11,6 +9,51 @@ export default function NodeModal({ node, onClose }) {
   }, [onClose])
 
   return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-6"
+      style={{ background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[88vh] flex flex-col overflow-hidden animate-modal-in">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-slate-50 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
+              <FileText size={15} className="text-slate-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Goulds 3196 Operation Manual</p>
+              <p className="text-[10px] text-gray-400">PDF Document</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <iframe
+          src={url}
+          title="Goulds 3196 Operation Manual"
+          className="flex-1 w-full border-0"
+        />
+      </div>
+    </div>
+  )
+}
+
+export default function NodeModal({ node, onClose }) {
+  const { type, data } = node
+  const [pdfOpen, setPdfOpen] = useState(false)
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape' && !pdfOpen) onClose() }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onClose, pdfOpen])
+
+  return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
       style={{ background: 'rgba(15, 23, 42, 0.55)', backdropFilter: 'blur(4px)' }}
@@ -160,9 +203,19 @@ export default function NodeModal({ node, onClose }) {
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <FileText size={14} className="text-slate-400" />
                   <span>{data.sourceRef}</span>
-                  <button className="ml-auto flex items-center gap-1 text-blue-500 hover:text-blue-700 text-xs font-medium">
-                    <ExternalLink size={11} /> Open document
-                  </button>
+                  {data.demoDocUrl && (
+                    <button
+                      onClick={() => setPdfOpen(true)}
+                      className="ml-auto flex items-center gap-1 text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors"
+                    >
+                      <ExternalLink size={11} /> Open document
+                    </button>
+                  )}
+                  {!data.demoDocUrl && (
+                    <button className="ml-auto flex items-center gap-1 text-blue-500 hover:text-blue-700 text-xs font-medium">
+                      <ExternalLink size={11} /> Open document
+                    </button>
+                  )}
                 </div>
               </section>
             </>
@@ -242,5 +295,10 @@ export default function NodeModal({ node, onClose }) {
         </div>
       </div>
     </div>
+
+    {pdfOpen && data.demoDocUrl && (
+      <PdfViewerModal url={data.demoDocUrl} onClose={() => setPdfOpen(false)} />
+    )}
+  </>
   )
 }

@@ -5,7 +5,8 @@ import { Mic, MicOff, PhoneOff, Send, Search } from 'lucide-react'
 
 import TroubleshootingCanvas from '../components/whiteboard/TroubleshootingCanvas'
 import { submitQuery } from '../api/troubleshooting'
-import { getMockGraphData } from '../data/mockGraph'
+import { getMockGraphData, allinolDemoScenario } from '../data/mockGraph'
+import manualPdfUrl from '../assets/manual.pdf?url'
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY
 const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025'
@@ -48,6 +49,23 @@ async function fetchContext() {
 
 const STATUS = { IDLE: 'idle', CONNECTING: 'connecting', ACTIVE: 'active', ENDING: 'ending' }
 
+const DEMO_PROBLEM = 'Pump starts normally, but after ~2 minutes it begins vibrating heavily and making a loud rattling noise. Flow rate also seems inconsistent.'
+
+const DEMO_CONTEXT = `
+# Demo Context — Allinol / Goulds 3196 Pump
+You are assisting a technician at an Allinol chemical plant operating a Goulds Model 3196 pump.
+When the technician describes a problem, listen and once you understand it, say naturally: "I'm pulling up the troubleshooting analysis on screen now." — this exact phrase (or very close to it) is important.
+After that, a visual diagram will appear. Then walk the technician step by step through the recommended actions.
+
+Known issue context (use this once the technician describes the problem):
+Problem: "Pump starts normally, but after ~2 minutes it begins vibrating heavily and making a loud rattling noise. Flow rate also seems inconsistent."
+Root cause: cavitation due to insufficient NPSH (suction head), air/vapor in suction line, or improper priming.
+Resolution: immediately shut down the pump, inspect suction line for obstructions, eliminate air pockets, re-prime the pump, restart and monitor.
+Key references: Goulds 3196 Operation Manual page 73 (vibration/cavitation), page 72 (startup procedure).
+Maintenance log 2026 Feb 12 (technician Daniel R. Costa) — identical symptom resolved without component replacement by correcting suction conditions.
+Always reference the Goulds 3196 manual when guiding the technician.
+`
+
 const SYSTEM_PROMPT = `you are a voice agent to help technicians in factories to solve issues and access manuals faster
 
 # Voice & Persona
@@ -75,7 +93,8 @@ If you feel the user wants to end the call but hasn't said a trigger, ask: "Are 
 `
 
 export default function DashboardPage() {
-  useLocation()
+  const location = useLocation()
+  const isDemo = location.state?.isDemo ?? false
 
   // ── Voice / Gemini refs ────────────────────────────────────────────────────
   const geminiSessionRef   = useRef(null)
@@ -86,9 +105,11 @@ export default function DashboardPage() {
   const activeSourcesRef   = useRef([])
   const mutedRef           = useRef(false)
   const statusRef          = useRef(STATUS.IDLE)
-  const startCallRef       = useRef(null)
-  const transcriptEndRef   = useRef(null)
-  const wakeWordRef        = useRef(null)
+  const startCallRef            = useRef(null)
+  const transcriptEndRef        = useRef(null)
+  const wakeWordRef             = useRef(null)
+  const demoCanvasTriggeredRef  = useRef(false)
+  const currentAssistantTextRef = useRef('')
 
   // ── Voice / Gemini state ───────────────────────────────────────────────────
   const [status, setStatus]               = useState(STATUS.IDLE)
@@ -153,6 +174,8 @@ export default function DashboardPage() {
   }, [])
 
   const cleanupCall = useCallback(() => {
+    // Only run if endCall hasn't already cleaned up (geminiSessionRef is nulled first in endCall)
+    if (statusRef.current === STATUS.IDLE) return
     micStreamRef.current?.getTracks().forEach((t) => t.stop())
     micStreamRef.current = null
     if (processorRef.current) {
@@ -170,10 +193,13 @@ export default function DashboardPage() {
   }, [flushAudio])
 
   const endCall = useCallback(() => {
+    if (statusRef.current === STATUS.IDLE || statusRef.current === STATUS.ENDING) return
     statusRef.current = STATUS.ENDING
     setStatus(STATUS.ENDING)
-    try { geminiSessionRef.current?.close() } catch { /* noop */ }
+    // Null the ref before closing so the onclose callback (cleanupCall) is a no-op
+    const session = geminiSessionRef.current
     geminiSessionRef.current = null
+    try { session?.close() } catch { /* noop */ }
     micStreamRef.current?.getTracks().forEach((t) => t.stop())
     micStreamRef.current = null
     if (processorRef.current) {
@@ -226,7 +252,10 @@ export default function DashboardPage() {
     setTranscript([])
     mutedRef.current = false
     setIsMuted(false)
-    try { geminiSessionRef.current?.close() } catch { /* noop */ }
+    demoCanvasTriggeredRef.current = false
+    currentAssistantTextRef.current = ''
+    if (isDemo) { setProblem(''); setGraphData(null) }
+    // Defensive cleanup in case a previous session didn't fully tear down
     geminiSessionRef.current = null
     micStreamRef.current?.getTracks().forEach((t) => t.stop())
     micStreamRef.current = null
@@ -240,7 +269,7 @@ export default function DashboardPage() {
     activeSourcesRef.current = []
     nextStartTimeRef.current = 0
     const userContext = await fetchContext()
-    const systemPrompt = SYSTEM_PROMPT + userContext
+    const systemPrompt = (isDemo ? DEMO_CONTEXT : '') + SYSTEM_PROMPT + userContext
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 })
     audioCtxRef.current = audioCtx
     if (!geminiClient) {
@@ -259,7 +288,7 @@ export default function DashboardPage() {
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Charon' } } },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          thinkingConfig: { thinkingBudget: 0 },
+          thinkingConfig: { thinkingLevel: 'minimal' },
         },
         callbacks: {
           onopen: () => console.log('[Gemini] Connection established'),
@@ -309,11 +338,29 @@ export default function DashboardPage() {
                   }
                   return [...finalized, { role: 'assistant', text, streaming: true }]
                 })
+
+                // Demo: detect trigger phrase, then populate canvas and prompt Bruno to narrate
+                if (isDemo && !demoCanvasTriggeredRef.current) {
+                  currentAssistantTextRef.current += ' ' + text.toLowerCase()
+                  const TRIGGER_PHRASES = ['pulling up', 'troubleshooting analysis', 'diagnostic overview', 'bringing up the']
+                  if (TRIGGER_PHRASES.some((p) => currentAssistantTextRef.current.includes(p))) {
+                    demoCanvasTriggeredRef.current = true
+                    const demo = allinolDemoScenario(manualPdfUrl)
+                    setProblem(DEMO_PROBLEM)
+                    setGraphData(demo.graph)
+                    setTimeout(() => {
+                      geminiSessionRef.current?.sendRealtimeInput({
+                        text: 'The troubleshooting canvas is now displayed on screen with the full analysis. Walk the technician clearly through each recommended step, referencing the diagram.',
+                      })
+                    }, 1200)
+                  }
+                }
               }
             }
             if (sc.turnComplete) {
               setVolumeLevel(0)
               setTranscript((prev) => prev.map((e) => (e.streaming ? { ...e, streaming: false } : e)))
+              currentAssistantTextRef.current = ''
             }
           },
           onerror: (e) => console.error('[Gemini] Error:', e?.message || e),
@@ -321,9 +368,8 @@ export default function DashboardPage() {
         },
       })
       geminiSessionRef.current = session
-      session.sendClientContent({
-        turns: [{ role: 'user', parts: [{ text: 'A factory technician just connected. Greet them and ask how you can help.' }] }],
-        turnComplete: true,
+      session.sendRealtimeInput({
+        text: 'A factory technician just connected. Greet them and ask how you can help.',
       })
     } catch (err) {
       console.error('[Gemini] Session error:', err)
@@ -590,6 +636,7 @@ export default function DashboardPage() {
           problem={problem}
           graphData={graphData}
           isQuerying={isQuerying}
+          isDemo={isDemo}
         />
       </main>
     </div>

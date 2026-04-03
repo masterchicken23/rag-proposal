@@ -18,6 +18,99 @@ export function getMockGraphData(problem = '') {
   return overheatBeltScenario(problem)
 }
 
+// ─── Demo Scenario: Allinol — Goulds 3196 Pump Cavitation ────────────────────
+
+export function allinolDemoScenario(demoDocUrl = '') {
+  return {
+    session_id: 'demo-session-allinol-001',
+    problem: 'Pump starts normally, but after ~2 minutes it begins vibrating heavily and making a loud rattling noise. Flow rate also seems inconsistent.',
+    graph: {
+      nodes: [
+        {
+          id: 'action-1',
+          type: 'actionNode',
+          position: { x: 360, y: 100 },
+          data: {
+            title: "Bruno's Final Recommendation",
+            reasoning:
+              'This recommendation is grounded in the vibration and cavitation guidelines from the Goulds 3196 operation manual, cross-referenced with prior maintenance cases involving similar vibration signatures. The combination of excessive vibration, noise, and unstable pressure strongly indicates cavitation or suction-related issues. The manual specifies that insufficient suction head (NPSH) and improper priming can lead to these exact symptoms, and immediate shutdown is required when vibration exceeds normal levels.',
+            likelyCauses: [
+              'Cavitation due to insufficient NPSH (low suction head)',
+              'Air or vapor pockets in the suction line',
+              'Pump not properly primed before operation',
+              'Partial blockage in suction line or impeller',
+            ],
+            actions: [
+              'Shut down the pump immediately to prevent damage to bearings and seals.',
+              'Inspect suction line to ensure it is fully open and free of obstructions.',
+              'Check for air leaks or vapor pockets in suction piping.',
+              'Re-prime the pump to ensure proper fluid fill before restart.',
+              'Restart and monitor vibration levels, pressure stability, and noise.',
+            ],
+            sources: [
+              { type: 'manual', title: 'Goulds 3196 Operation Manual', ref: 'page 73', confidence: 'high' },
+              { type: 'manual', title: 'Goulds 3196 Startup Procedure', ref: 'page 72', confidence: 'high' },
+              { type: 'log', title: 'Maintenance Log', ref: '2026 Feb 12 entry', confidence: 'high' },
+            ],
+          },
+        },
+        {
+          id: 'manual-1',
+          type: 'manualNode',
+          position: { x: 20, y: 280 },
+          data: {
+            title: 'Supporting Manual Extract',
+            confidence: 87,
+            docType: 'Operational',
+            bullets: [
+              'Pump must be immediately shut down if excessive vibration or noise occurs.',
+              'Cavitation risk arises when suction head is insufficient (NPSHA below required threshold).',
+              'Re-prime the pump if rated pressure is not reached after startup.',
+            ],
+            sourceRef: 'Goulds 3196 Operation Manual — page 73',
+            fullText:
+              'TROUBLESHOOTING — VIBRATION & NOISE\n\nExcessive vibration or unusual noise during operation is a critical warning sign that must not be ignored. The pump must be shut down immediately to prevent damage to bearings, mechanical seals, and internal wetted components.\n\nCommon causes:\n• Cavitation: occurs when the available NPSH (NPSHA) falls below the required NPSH (NPSHR). Symptoms include rattling, vibration, and inconsistent flow.\n• Air/vapor in suction line: can cause erratic operation and pressure fluctuation.\n• Improper priming: pump must be fully primed before starting.\n• Clogged impeller or suction strainer: restricts flow and can induce cavitation.\n\nCorrective action:\n1. Shut down immediately.\n2. Verify suction line is fully open and unobstructed.\n3. Bleed air from suction piping.\n4. Re-prime pump per startup procedure (page 72).\n5. Restart and monitor.',
+            demoDocUrl,
+          },
+        },
+        {
+          id: 'case-1',
+          type: 'caseNode',
+          position: { x: 760, y: 420 },
+          data: {
+            title: 'Past Maintenance Case',
+            confidence: 87,
+            docType: 'Operational',
+            technician: { name: 'Daniel R. Costa', initials: 'DC' },
+            date: '2026 Feb 12',
+            manualRef: 'Goulds 3196 Operation Manual',
+            symptom: 'Excessive vibration and rattling noise observed during operation, especially after startup. Pump output pressure fluctuating.',
+            cause: 'Insufficient suction conditions leading to cavitation (NPSHA below required threshold), causing unstable flow and vibration.',
+            fix: 'Shut down pump immediately. Verified suction line fully open and unobstructed. Eliminated air pockets in suction line. Re-primed pump and restarted system.',
+            sourceRef: 'Maintenance Log — 2026 Feb 12',
+            similarNote:
+              'Similar vibration pattern recorded in prior operation logs; resolved by correcting suction conditions and ensuring proper priming. No component replacement required; issue was operational rather than mechanical.',
+          },
+        },
+        {
+          id: 'device-1',
+          type: 'deviceNode',
+          position: { x: 860, y: 80 },
+          data: {
+            analysis:
+              'Excessive vibration and rattling noise detected approximately 2 minutes after startup. Flow rate inconsistent; output pressure fluctuating. Pattern is consistent with cavitation or a suction-side fault (air ingestion or insufficient NPSH).',
+          },
+        },
+      ],
+      edges: [
+        dashedEdge('e-manual-action', 'manual-1', 'action-1'),
+        dashedEdge('e-case-action', 'case-1', 'action-1'),
+        dashedEdge('e-action-device', 'action-1', 'device-1'),
+      ],
+    },
+  }
+}
+
 // Shared edge style helpers
 const dashedEdge = (id, source, target, extra = {}) => ({
   id,

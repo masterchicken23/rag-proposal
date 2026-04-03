@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import allinolLogoUrl from '../assets/alinoil.png'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 
@@ -12,8 +13,9 @@ const STATUS_COLORS = {
 export default function UploadPage() {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
-  const [files, setFiles] = useState([])   // [{ name, status, chunks?, error? }]
+  const [files, setFiles] = useState([])
   const [isDragging, setIsDragging] = useState(false)
+  const [isDemoSelected, setIsDemoSelected] = useState(false)
 
   const uploadFile = useCallback(async (file) => {
     const form = new FormData()
@@ -33,17 +35,12 @@ export default function UploadPage() {
 
   const processFiles = useCallback(async (fileList) => {
     const pending = Array.from(fileList)
-    // Add all as uploading immediately
     setFiles((prev) => [
       ...prev,
       ...pending.map((f) => ({ name: f.name, status: 'uploading' })),
     ])
-
-    // Upload in parallel
     const results = await Promise.all(pending.map(uploadFile))
-
     setFiles((prev) => {
-      // Replace the uploading placeholders with results
       const names = new Set(results.map((r) => r.name))
       const kept = prev.filter((f) => !(f.status === 'uploading' && names.has(f.name)))
       return [...kept, ...results]
@@ -59,16 +56,31 @@ export default function UploadPage() {
   const doneCount = files.filter((f) => f.status === 'done').length
   const uploading = files.some((f) => f.status === 'uploading')
 
+  const handleCTA = () => {
+    navigate('/dashboard', isDemoSelected ? { state: { isDemo: true } } : undefined)
+  }
+
   return (
     <div className="min-h-screen dashboard-bg flex flex-col items-center justify-center p-6 relative overflow-hidden">
+
+      {/* Allinol logo — top right (demo mode only) */}
+      {isDemoSelected && (
+        <div className="absolute top-5 right-6 z-20 animate-fade-in">
+          <img src={allinolLogoUrl} alt="Allinol" className="h-9 object-contain" />
+        </div>
+      )}
+
       <div className="w-full max-w-md relative z-10">
 
         {/* Header */}
         <div className="text-center mb-8 animate-fade-in">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/50 border border-white/60 mb-5">
-            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-xs font-medium text-gray-500">TRACTIAN — Field Assistant</span>
-          </div>
+          {!isDemoSelected && (
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/50 border border-white/60 mb-5">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              <span className="text-xs font-medium text-gray-500">Field Assistant</span>
+            </div>
+          )}
+          {isDemoSelected && <div className="mb-5" />}
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-100 to-sky-100 flex items-center justify-center text-3xl shadow-sm mx-auto mb-4">
             🔧
           </div>
@@ -79,7 +91,7 @@ export default function UploadPage() {
         </div>
 
         {/* Upload card */}
-        <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/60 overflow-hidden mb-5 animate-fade-in">
+        <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/60 overflow-hidden mb-4 animate-fade-in">
           <div className="p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
@@ -185,16 +197,95 @@ export default function UploadPage() {
           </div>
         </div>
 
+        {/* ── Demo scenario card (always visible) ─────────────────────────────── */}
+        <div
+          className={`
+            mb-5 rounded-2xl border overflow-hidden transition-all duration-300
+            ${isDemoSelected
+              ? 'border-emerald-300 shadow-lg shadow-emerald-100'
+              : 'border-gray-200/80 shadow-sm'
+            }
+          `}
+        >
+          {/* Logo header */}
+          <div className={`
+            flex items-center justify-between px-5 pt-5 pb-4 border-b transition-colors duration-300
+            ${isDemoSelected ? 'bg-emerald-50 border-emerald-200/70' : 'bg-white/80 border-gray-100'}
+          `}>
+            <img src={allinolLogoUrl} alt="Allinol" className="h-8 object-contain" />
+            {/* Demo toggle */}
+            <button
+              onClick={() => setIsDemoSelected((v) => !v)}
+              className="flex items-center gap-2.5 group"
+              aria-label="Toggle demo mode"
+            >
+              <span className={`text-[11px] font-semibold transition-colors ${isDemoSelected ? 'text-emerald-700' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                Demo Mode
+              </span>
+              {/* Toggle pill */}
+              <div className={`
+                relative w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0
+                ${isDemoSelected ? 'bg-emerald-500' : 'bg-gray-200 group-hover:bg-gray-300'}
+              `}>
+                <div className={`
+                  absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200
+                  ${isDemoSelected ? 'left-5' : 'left-0.5'}
+                `} />
+              </div>
+            </button>
+          </div>
+
+          {/* Case content */}
+          <div className={`px-5 py-4 transition-colors duration-300 ${isDemoSelected ? 'bg-emerald-50/60' : 'bg-white/60'}`}>
+            <div className="flex items-center gap-2 mb-2.5">
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${isDemoSelected ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+              <span className={`text-[11px] font-bold uppercase tracking-wide transition-colors ${isDemoSelected ? 'text-emerald-800' : 'text-gray-500'}`}>
+                Active Case — Goulds 3196 Pump
+              </span>
+              {isDemoSelected && (
+                <span className="ml-auto text-[10px] font-semibold text-emerald-600 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full animate-fade-in">
+                  Active
+                </span>
+              )}
+            </div>
+            <p className={`text-xs leading-relaxed transition-colors ${isDemoSelected ? 'text-emerald-900' : 'text-gray-500'}`}>
+              A technician at a chemical plant reports the pump vibrating heavily with a loud rattling noise ~2 minutes after startup, with inconsistent flow.
+              Suspected cause:{' '}
+              <span className={`font-semibold ${isDemoSelected ? 'text-emerald-800' : 'text-gray-600'}`}>
+                cavitation due to insufficient suction head (NPSH)
+              </span>.
+            </p>
+            <div className={`mt-3 flex items-center gap-1.5 text-[10px] transition-colors ${isDemoSelected ? 'text-emerald-600' : 'text-gray-400'}`}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <span>Goulds 3196 Operation Manual · Maintenance Log 2026 Feb 12</span>
+            </div>
+          </div>
+        </div>
+
         {/* CTA */}
         <div className="flex flex-col gap-3 animate-fade-in">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={handleCTA}
             disabled={uploading}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-sky-500 text-white font-semibold shadow-lg shadow-blue-500/25 hover:brightness-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`
+              w-full py-3.5 rounded-xl text-white font-semibold shadow-lg transition-all duration-300
+              disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-105 active:scale-95
+              ${isDemoSelected
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25'
+                : 'bg-gradient-to-r from-blue-500 to-sky-500 shadow-blue-500/25'
+              }
+            `}
           >
-            {uploading ? 'Processing files…' : 'Talk to Bruno →'}
+            {uploading
+              ? 'Processing files…'
+              : isDemoSelected
+              ? 'Start Demo →'
+              : 'Talk to Bruno →'}
           </button>
-          {files.length === 0 && (
+          {files.length === 0 && !isDemoSelected && (
             <p className="text-center text-[11px] text-gray-400">
               You can skip uploading and start talking right away
             </p>

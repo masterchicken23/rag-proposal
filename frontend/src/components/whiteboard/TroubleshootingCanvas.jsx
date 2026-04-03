@@ -16,6 +16,7 @@ import DeviceNode from './DeviceNode'
 import NodeModal from './NodeModal'
 import { useState, useEffect } from 'react'
 import { Loader2, Cpu, Plus, X, Upload, FileText, Send, ToggleLeft, ToggleRight } from 'lucide-react'
+import allinolLogoUrl from '../../assets/alinoil.png'
 
 // Node type registry — must be defined outside the component to avoid remounts
 const NODE_TYPES = {
@@ -162,7 +163,7 @@ function UploadPopup({ onClose }) {
   )
 }
 
-function Canvas({ problem, graphData, isQuerying }) {
+function Canvas({ problem, graphData, isQuerying, isDemo }) {
   const [expandedNode, setExpandedNode] = useState(null)
   const [showUpload, setShowUpload]     = useState(false)
 
@@ -209,11 +210,12 @@ function Canvas({ problem, graphData, isQuerying }) {
           className="!border-0 !shadow-sm !rounded-xl overflow-hidden"
         />
 
-        {/* TRACTIAN logo — top right */}
+        {/* Branding — top right */}
         <div className="absolute top-4 right-4 z-10 pointer-events-none">
-          <span className="text-base font-black tracking-widest text-gray-800 select-none">
-            TRACTIAN
-          </span>
+          {isDemo
+            ? <img src={allinolLogoUrl} alt="Allinol" className="h-8 object-contain select-none" />
+            : <span className="text-base font-black tracking-widest text-gray-800 select-none">TRACTIAN</span>
+          }
         </div>
 
         {/* Problem header — top center */}
@@ -307,10 +309,10 @@ function Canvas({ problem, graphData, isQuerying }) {
   )
 }
 
-export default function TroubleshootingCanvas(props) {
+export default function TroubleshootingCanvas({ problem, graphData, isQuerying, isDemo }) {
   return (
     <ReactFlowProvider>
-      <Canvas {...props} />
+      <Canvas problem={problem} graphData={graphData} isQuerying={isQuerying} isDemo={isDemo} />
     </ReactFlowProvider>
   )
 }
