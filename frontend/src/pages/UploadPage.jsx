@@ -70,7 +70,7 @@ export default function UploadPage() {
         </div>
       )}
 
-      <div className="w-full max-w-md relative z-10">
+      <div className="w-full max-w-5xl relative z-10">
 
         {/* Header */}
         <div className="text-center mb-8 animate-fade-in">
@@ -90,177 +90,179 @@ export default function UploadPage() {
           </p>
         </div>
 
-        {/* Upload card */}
-        <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/60 overflow-hidden mb-4 animate-fade-in">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div className="grid gap-4 lg:grid-cols-2 mb-5 items-stretch">
+          {/* Upload card */}
+          <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/60 overflow-hidden animate-fade-in h-full">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <polyline points="9 15 12 12 15 15" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-gray-800 font-semibold text-sm">Upload Documents</h3>
+                  <p className="text-gray-400 text-[11px]">PDF, JSON, or TXT — optional</p>
+                </div>
+              </div>
+
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`
+                  min-h-[140px] flex flex-col items-center justify-center rounded-xl border-2 border-dashed
+                  cursor-pointer transition-all duration-200
+                  ${isDragging
+                    ? 'border-blue-400 bg-blue-50/50'
+                    : 'border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/30'
+                  }
+                `}
+              >
+                {files.length === 0 ? (
+                  <div className="text-center px-4 py-6">
+                    <svg width="32" height="32" viewBox="0 0 48 48" fill="none" className="mx-auto mb-2 opacity-40">
+                      <rect x="12" y="8" width="24" height="32" rx="3" fill="rgba(59,130,246,0.08)" />
+                      <path d="M20 22h8M20 27h8M20 32h5" stroke="rgba(59,130,246,0.2)" strokeWidth="1.5" strokeLinecap="round" />
+                      <circle cx="36" cy="36" r="8" fill="#3B82F6" />
+                      <path d="M36 32v8M32 36h8" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    <p className="text-gray-400 text-xs">
+                      Drop files or{' '}
+                      <span className="text-blue-500 font-medium underline underline-offset-2">browse</span>
+                    </p>
+                    <p className="text-gray-300 text-[10px] mt-1">Manuals, procedures, troubleshooting guides…</p>
+                  </div>
+                ) : (
+                  <div className="px-4 py-4 w-full space-y-1.5">
+                    {files.map((f) => (
+                      <div key={f.name} className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[f.status]}`}>
+                          {f.status === 'uploading' && '⏳ '}
+                          {f.status === 'done' && '✓ '}
+                          {f.status === 'error' && '✗ '}
+                          {f.name.length > 26 ? f.name.slice(0, 23) + '…' : f.name}
+                          {f.status === 'done' && f.chunks !== undefined && (
+                            <span className="opacity-60 ml-1">({f.chunks} chunks)</span>
+                          )}
+                        </span>
+                        {f.status !== 'uploading' && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeFile(f.name) }}
+                            className="opacity-40 hover:opacity-80 flex-shrink-0"
+                            aria-label={`Remove ${f.name}`}
+                          >
+                            <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                              <line x1="8" y1="2" x2="2" y2="8" />
+                              <line x1="2" y1="2" x2="8" y2="8" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <p className="text-gray-400 text-[10px] text-center pt-1">
+                      <span className="text-blue-500 underline underline-offset-2">Add more files</span>
+                    </p>
+                  </div>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.json,.txt,.md"
+                  multiple
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-200/60 flex items-center justify-between">
+              <span className="text-[10px] text-gray-400">
+                {uploading
+                  ? 'Processing…'
+                  : doneCount > 0
+                  ? `${doneCount} file${doneCount !== 1 ? 's' : ''} ready`
+                  : 'No files — Bruno will still help you'}
+              </span>
+              {doneCount > 0 && !uploading && (
+                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
+                  <svg width="10" height="10" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="1 5.5 3.5 8 9 2" />
+                  </svg>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Demo scenario card (always visible) ─────────────────────────────── */}
+          <div
+            className={`
+              rounded-2xl border overflow-hidden transition-all duration-300 h-full
+              ${isDemoSelected
+                ? 'border-emerald-300 shadow-lg shadow-emerald-100'
+                : 'border-gray-200/80 shadow-sm'
+              }
+            `}
+          >
+            {/* Logo header */}
+            <div className={`
+              flex items-center justify-between px-5 pt-5 pb-4 border-b transition-colors duration-300
+              ${isDemoSelected ? 'bg-emerald-50 border-emerald-200/70' : 'bg-white/80 border-gray-100'}
+            `}>
+              <img src={allinolLogoUrl} alt="Allinol" className="h-8 object-contain" />
+              {/* Demo toggle */}
+              <button
+                onClick={() => setIsDemoSelected((v) => !v)}
+                className="flex items-center gap-2.5 group"
+                aria-label="Toggle demo mode"
+              >
+                <span className={`text-[11px] font-semibold transition-colors ${isDemoSelected ? 'text-emerald-700' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                  Demo Mode
+                </span>
+                {/* Toggle pill */}
+                <div className={`
+                  relative w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0
+                  ${isDemoSelected ? 'bg-emerald-500' : 'bg-gray-200 group-hover:bg-gray-300'}
+                `}>
+                  <div className={`
+                    absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200
+                    ${isDemoSelected ? 'left-5' : 'left-0.5'}
+                  `} />
+                </div>
+              </button>
+            </div>
+
+            {/* Case content */}
+            <div className={`px-5 py-4 transition-colors duration-300 ${isDemoSelected ? 'bg-emerald-50/60' : 'bg-white/60'}`}>
+              <div className="flex items-center gap-2 mb-2.5">
+                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${isDemoSelected ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                <span className={`text-[11px] font-bold uppercase tracking-wide transition-colors ${isDemoSelected ? 'text-emerald-800' : 'text-gray-500'}`}>
+                  Active Case — Goulds 3196 Pump
+                </span>
+                {isDemoSelected && (
+                  <span className="ml-auto text-[10px] font-semibold text-emerald-600 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full animate-fade-in">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className={`text-xs leading-relaxed transition-colors ${isDemoSelected ? 'text-emerald-900' : 'text-gray-500'}`}>
+                A technician at a chemical plant reports the pump vibrating heavily with a loud rattling noise ~2 minutes after startup, with inconsistent flow.
+                Suspected cause:{' '}
+                <span className={`font-semibold ${isDemoSelected ? 'text-emerald-800' : 'text-gray-600'}`}>
+                  cavitation due to insufficient suction head (NPSH)
+                </span>.
+              </p>
+              <div className={`mt-3 flex items-center gap-1.5 text-[10px] transition-colors ${isDemoSelected ? 'text-emerald-600' : 'text-gray-400'}`}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                   <polyline points="14 2 14 8 20 8" />
-                  <line x1="12" y1="18" x2="12" y2="12" />
-                  <polyline points="9 15 12 12 15 15" />
                 </svg>
+                <span>Goulds 3196 Operation Manual · Maintenance Log 2026 Feb 12</span>
               </div>
-              <div>
-                <h3 className="text-gray-800 font-semibold text-sm">Upload Documents</h3>
-                <p className="text-gray-400 text-[11px]">PDF, JSON, or TXT — optional</p>
-              </div>
-            </div>
-
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`
-                min-h-[140px] flex flex-col items-center justify-center rounded-xl border-2 border-dashed
-                cursor-pointer transition-all duration-200
-                ${isDragging
-                  ? 'border-blue-400 bg-blue-50/50'
-                  : 'border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/30'
-                }
-              `}
-            >
-              {files.length === 0 ? (
-                <div className="text-center px-4 py-6">
-                  <svg width="32" height="32" viewBox="0 0 48 48" fill="none" className="mx-auto mb-2 opacity-40">
-                    <rect x="12" y="8" width="24" height="32" rx="3" fill="rgba(59,130,246,0.08)" />
-                    <path d="M20 22h8M20 27h8M20 32h5" stroke="rgba(59,130,246,0.2)" strokeWidth="1.5" strokeLinecap="round" />
-                    <circle cx="36" cy="36" r="8" fill="#3B82F6" />
-                    <path d="M36 32v8M32 36h8" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                  <p className="text-gray-400 text-xs">
-                    Drop files or{' '}
-                    <span className="text-blue-500 font-medium underline underline-offset-2">browse</span>
-                  </p>
-                  <p className="text-gray-300 text-[10px] mt-1">Manuals, procedures, troubleshooting guides…</p>
-                </div>
-              ) : (
-                <div className="px-4 py-4 w-full space-y-1.5">
-                  {files.map((f) => (
-                    <div key={f.name} className="flex items-center justify-between gap-2 text-[11px]">
-                      <span className={`px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[f.status]}`}>
-                        {f.status === 'uploading' && '⏳ '}
-                        {f.status === 'done' && '✓ '}
-                        {f.status === 'error' && '✗ '}
-                        {f.name.length > 26 ? f.name.slice(0, 23) + '…' : f.name}
-                        {f.status === 'done' && f.chunks !== undefined && (
-                          <span className="opacity-60 ml-1">({f.chunks} chunks)</span>
-                        )}
-                      </span>
-                      {f.status !== 'uploading' && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); removeFile(f.name) }}
-                          className="opacity-40 hover:opacity-80 flex-shrink-0"
-                          aria-label={`Remove ${f.name}`}
-                        >
-                          <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <line x1="8" y1="2" x2="2" y2="8" />
-                            <line x1="2" y1="2" x2="8" y2="8" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <p className="text-gray-400 text-[10px] text-center pt-1">
-                    <span className="text-blue-500 underline underline-offset-2">Add more files</span>
-                  </p>
-                </div>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.json,.txt,.md"
-                multiple
-                onChange={handleFileChange}
-                className="hidden"
-              />
-            </div>
-          </div>
-
-          <div className="px-6 py-3 border-t border-gray-200/60 flex items-center justify-between">
-            <span className="text-[10px] text-gray-400">
-              {uploading
-                ? 'Processing…'
-                : doneCount > 0
-                ? `${doneCount} file${doneCount !== 1 ? 's' : ''} ready`
-                : 'No files — Bruno will still help you'}
-            </span>
-            {doneCount > 0 && !uploading && (
-              <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
-                <svg width="10" height="10" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="1 5.5 3.5 8 9 2" />
-                </svg>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── Demo scenario card (always visible) ─────────────────────────────── */}
-        <div
-          className={`
-            mb-5 rounded-2xl border overflow-hidden transition-all duration-300
-            ${isDemoSelected
-              ? 'border-emerald-300 shadow-lg shadow-emerald-100'
-              : 'border-gray-200/80 shadow-sm'
-            }
-          `}
-        >
-          {/* Logo header */}
-          <div className={`
-            flex items-center justify-between px-5 pt-5 pb-4 border-b transition-colors duration-300
-            ${isDemoSelected ? 'bg-emerald-50 border-emerald-200/70' : 'bg-white/80 border-gray-100'}
-          `}>
-            <img src={allinolLogoUrl} alt="Allinol" className="h-8 object-contain" />
-            {/* Demo toggle */}
-            <button
-              onClick={() => setIsDemoSelected((v) => !v)}
-              className="flex items-center gap-2.5 group"
-              aria-label="Toggle demo mode"
-            >
-              <span className={`text-[11px] font-semibold transition-colors ${isDemoSelected ? 'text-emerald-700' : 'text-gray-400 group-hover:text-gray-600'}`}>
-                Demo Mode
-              </span>
-              {/* Toggle pill */}
-              <div className={`
-                relative w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0
-                ${isDemoSelected ? 'bg-emerald-500' : 'bg-gray-200 group-hover:bg-gray-300'}
-              `}>
-                <div className={`
-                  absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200
-                  ${isDemoSelected ? 'left-5' : 'left-0.5'}
-                `} />
-              </div>
-            </button>
-          </div>
-
-          {/* Case content */}
-          <div className={`px-5 py-4 transition-colors duration-300 ${isDemoSelected ? 'bg-emerald-50/60' : 'bg-white/60'}`}>
-            <div className="flex items-center gap-2 mb-2.5">
-              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${isDemoSelected ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-              <span className={`text-[11px] font-bold uppercase tracking-wide transition-colors ${isDemoSelected ? 'text-emerald-800' : 'text-gray-500'}`}>
-                Active Case — Goulds 3196 Pump
-              </span>
-              {isDemoSelected && (
-                <span className="ml-auto text-[10px] font-semibold text-emerald-600 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full animate-fade-in">
-                  Active
-                </span>
-              )}
-            </div>
-            <p className={`text-xs leading-relaxed transition-colors ${isDemoSelected ? 'text-emerald-900' : 'text-gray-500'}`}>
-              A technician at a chemical plant reports the pump vibrating heavily with a loud rattling noise ~2 minutes after startup, with inconsistent flow.
-              Suspected cause:{' '}
-              <span className={`font-semibold ${isDemoSelected ? 'text-emerald-800' : 'text-gray-600'}`}>
-                cavitation due to insufficient suction head (NPSH)
-              </span>.
-            </p>
-            <div className={`mt-3 flex items-center gap-1.5 text-[10px] transition-colors ${isDemoSelected ? 'text-emerald-600' : 'text-gray-400'}`}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-              <span>Goulds 3196 Operation Manual · Maintenance Log 2026 Feb 12</span>
             </div>
           </div>
         </div>

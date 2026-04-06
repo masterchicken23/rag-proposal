@@ -1,0 +1,74 @@
+## Data Ingestion and Storage
+
+# Input
+Input
+OEM Manuals in PDF, JSON & TXT
+PDF: Uses pdfplumber at page-level
+JSON: Normalizes to Text
+Images:
+
+# Vision extraction: Gemini Flash
+
+Stored as "diagram" chunks
+Normalize sources to single text format
+Align page-level extraction with chunks
+Image handling = Higher Cost, but essential
+
+Why
+How
+Company maintance log
+
+# Vectorization
+Converts each chunk into a 768-dim vector
+Uses Google Embedding-001
+Model outputs fixed-size list of floats,  each representing a learned dimension of meaning
+Gemini optimizes each vector for its role in search
+Vectors make it possible to measure similarity between any two pieces of content, capturing intent and context
+
+
+# Storage
+Pinecone: Cloud vector database, built for AI
+Accessed entirely via API: no servers to provision or maintain
+Handles horizontal scaling, replication, and uptime automatically = no infra overhead
+Purpose-built for RAG pipelines with guaranteed low-latency search at scale
+Built-in multi-tenancy and access control, critical for isolating enterprise clients
+
+Chunking
+Chunking
+Word-based segmentation:
+800 words per chunk
+100-word overlap
+chunk_id = source::index
+source = filename
+Chose balanced middle chunk size (800/100) for precision and context
+•
+Overlap preserves:
+Sentence Continuity
+Technical Explanations
+
+
+# Agentic Framework
+Single-Agent, Voice-First – Powered by Gemini Live API
+User Voice → Wake Word ("Hey Bruno") → Context Retrieval → Gemini Live Session → Real-time Audio Response
+Explanation
+Gemini Live API handles the full conversation loop natively over a persistent WebSocket –  context is injected once at session start, and the model manages its own turn history.
+
+# Inputs
+What is injected into model at session initialization
+System prompt (persona, rules, end triggers)
+Conversation memory (Gemini manages turns natively)
+Top-Ranked Manual Chunks (retrieved from ChromaDB)
+Machine ID (scopes session to specific asset) + Live audio stream
+
+# Session Storage
+Persistent, scoped, and token-aware
+A sliding window trims older turns to stay within token limits, always preserving the most recent diagnostic steps
+Explanation
+PostgreSQL over Redis or in-memory – session data for a troubleshooting workflow is relational by nature: a session belongs to a technician, references a machine, and contains an ordered sequence of turns.
+
+# Outputs
+Voice Response
+Real-time PCM audio streamed back turn-by-turn. 
+Interrupted immediately if the user speaks.
+Structure Graph + Solution Manual
+Rendered as an interactive troubleshooting canvas — each node maps to a diagnostic step, cause, or action.

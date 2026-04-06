@@ -6,7 +6,7 @@ export default function DeviceNode({ data, selected }) {
 
   return (
     <>
-      <Handle type="target" position={Position.Left} className="device-handle" />
+      <Handle type="target" position={Position.Top} className="device-handle" />
 
       <div
         className={`device-node-card ${selected ? 'ring-2 ring-blue-400/60' : ''}`}

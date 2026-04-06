@@ -2,11 +2,11 @@ import { Handle, Position } from '@xyflow/react'
 import { FileText, Maximize2 } from 'lucide-react'
 
 export default function ManualNode({ data, selected }) {
-  const { title, confidence, docType, bullets, sourceRef, onExpand } = data
+  const { title, confidence, docType, bullets, sourceRef, demoDocUrl, onExpand } = data
 
   return (
     <>
-      <Handle type="source" position={Position.Right} className="manual-handle" />
+      <Handle type="target" position={Position.Top} className="manual-handle" />
 
       <div
         className={`manual-node-card ${selected ? 'ring-2 ring-slate-400' : ''}`}
@@ -56,6 +56,26 @@ export default function ManualNode({ data, selected }) {
             </ul>
           </div>
         </div>
+
+        {/* PDF preview buttons */}
+        {demoDocUrl && (
+          <div className="flex gap-2 px-3.5 py-2.5 border-t border-slate-100">
+            <button
+              onClick={() => onExpand && onExpand({ type: 'manual', data, pdfMode: 'relevant' })}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
+            >
+              <FileText size={10} />
+              Relevant Pages
+            </button>
+            <button
+              onClick={() => onExpand && onExpand({ type: 'manual', data, pdfMode: 'full' })}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <FileText size={10} />
+              Complete Document
+            </button>
+          </div>
+        )}
       </div>
     </>
   )

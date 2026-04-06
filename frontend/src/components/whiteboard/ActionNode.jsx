@@ -6,8 +6,8 @@ export default function ActionNode({ data, selected }) {
 
   return (
     <>
-      <Handle type="target" position={Position.Left} className="action-handle" />
-      <Handle type="target" position={Position.Right} className="action-handle" />
+      <Handle type="target" position={Position.Top} className="action-handle" />
+      <Handle type="source" position={Position.Bottom} className="action-handle" />
 
       <div
         className={`action-node-card ${selected ? 'ring-2 ring-indigo-400' : ''}`}

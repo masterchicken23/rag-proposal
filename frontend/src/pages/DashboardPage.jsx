@@ -53,7 +53,9 @@ const DEMO_PROBLEM = 'Pump starts normally, but after ~2 minutes it begins vibra
 
 const DEMO_CONTEXT = `
 # Demo Context — Allinol / Goulds 3196 Pump
-You are assisting a technician at an Allinol chemical plant operating a Goulds Model 3196 pump.
+You are Bruno, the Allinol assistant, helping a technician at an Allinol chemical plant.
+When you greet the technician, introduce yourself as the Allinol assistant.
+Do not mention the Goulds 3196 pump, cavitation, or the known case until the technician has described the issue first.
 When the technician describes a problem, listen and once you understand it, say naturally: "I'm pulling up the troubleshooting analysis on screen now." — this exact phrase (or very close to it) is important.
 After that, a visual diagram will appear. Then walk the technician step by step through the recommended actions.
 
@@ -369,7 +371,9 @@ export default function DashboardPage() {
       })
       geminiSessionRef.current = session
       session.sendRealtimeInput({
-        text: 'A factory technician just connected. Greet them and ask how you can help.',
+        text: isDemo
+          ? 'A technician just connected. Greet them as Bruno, the Allinol assistant, and ask how you can help today. Do not mention the Goulds pump or the demo case unless the technician brings up the issue first.'
+          : 'A factory technician just connected. Greet them and ask how you can help.',
       })
     } catch (err) {
       console.error('[Gemini] Session error:', err)

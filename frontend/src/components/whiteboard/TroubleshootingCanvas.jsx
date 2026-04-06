@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   Controls,
+  Position,
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
@@ -17,6 +18,7 @@ import NodeModal from './NodeModal'
 import { useState, useEffect } from 'react'
 import { Loader2, Cpu, Plus, X, Upload, FileText, Send, ToggleLeft, ToggleRight } from 'lucide-react'
 import allinolLogoUrl from '../../assets/alinoil.png'
+import gouldsPumpUrl from '../../assets/goulds-imd.png'
 
 // Node type registry — must be defined outside the component to avoid remounts
 const NODE_TYPES = {
@@ -24,6 +26,13 @@ const NODE_TYPES = {
   manualNode: ManualNode,
   caseNode: CaseNode,
   deviceNode: DeviceNode,
+}
+
+const NODE_LAYOUT = {
+  actionNode: { x: 370, y: 20  },
+  manualNode: { x: 0,   y: 780 },
+  deviceNode: { x: 600, y: 780 },
+  caseNode:   { x: 880, y: 780 },
 }
 
 function UploadPopup({ onClose }) {
@@ -167,23 +176,34 @@ function Canvas({ problem, graphData, isQuerying, isDemo }) {
   const [expandedNode, setExpandedNode] = useState(null)
   const [showUpload, setShowUpload]     = useState(false)
 
-  // Inject the onExpand callback into each node's data
-  const enrichedNodes = useMemo(() => {
-    if (!graphData?.nodes) return []
-    return graphData.nodes.map((n) => ({
-      ...n,
-      data: { ...n.data, onExpand: (node) => setExpandedNode(node) },
+  const normalizedGraph = useMemo(() => {
+    if (!graphData) return { nodes: [], edges: [] }
+
+    const nodes = (graphData.nodes ?? []).map((node) => ({
+      ...node,
+      position: NODE_LAYOUT[node.type] ?? node.position,
+      sourcePosition: Position.Bottom,
+      targetPosition: Position.Top,
+      data: { ...node.data, onExpand: (expanded) => setExpandedNode(expanded) },
     }))
+
+    const edges = (graphData.edges ?? []).map((edge) => ({
+      ...edge,
+      sourcePosition: Position.Bottom,
+      targetPosition: Position.Top,
+    }))
+
+    return { nodes, edges }
   }, [graphData])
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(enrichedNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(graphData?.edges ?? [])
+  const [nodes, setNodes, onNodesChange] = useNodesState(normalizedGraph.nodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(normalizedGraph.edges)
 
   // Sync when new graph data arrives
   useEffect(() => {
-    setNodes(enrichedNodes)
-    setEdges(graphData?.edges ?? [])
-  }, [enrichedNodes, graphData, setNodes, setEdges])
+    setNodes(normalizedGraph.nodes)
+    setEdges(normalizedGraph.edges)
+  }, [normalizedGraph, setNodes, setEdges])
 
   const onConnect = useCallback(() => {}, []) // connections are read-only
 
@@ -198,7 +218,7 @@ function Canvas({ problem, graphData, isQuerying, isDemo }) {
         nodeTypes={NODE_TYPES}
         nodesConnectable={false}
         fitView
-        fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
+        fitViewOptions={{ padding: 0.35, maxZoom: 0.85 }}
         minZoom={0.3}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
@@ -210,21 +230,32 @@ function Canvas({ problem, graphData, isQuerying, isDemo }) {
           className="!border-0 !shadow-sm !rounded-xl overflow-hidden"
         />
 
-        {/* Branding — top right */}
-        <div className="absolute top-4 right-4 z-10 pointer-events-none">
+        {/* Branding + asset image — top right */}
+        <div className="absolute top-4 right-4 z-10 pointer-events-none flex flex-col items-end gap-3">
           {isDemo
             ? <img src={allinolLogoUrl} alt="Allinol" className="h-8 object-contain select-none" />
             : <span className="text-base font-black tracking-widest text-gray-800 select-none">TRACTIAN</span>
           }
+          {graphData && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-100 shadow-sm p-3">
+              <img
+                src={gouldsPumpUrl}
+                alt="Machine asset"
+                className="h-28 w-auto object-contain select-none"
+                draggable={false}
+              />
+              <p className="text-[9px] text-gray-400 text-center mt-1.5 font-medium tracking-wide">ASSET REFERENCE</p>
+            </div>
+          )}
         </div>
 
-        {/* Problem header — top center */}
+        {/* Problem header — thin clipping tab */}
         {problem && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none px-4">
-            <p className="text-sm font-medium text-gray-700 text-center whitespace-nowrap">
-              Current problem:{' '}
-              <span className="font-semibold text-gray-900">{problem}</span>
-            </p>
+          <div className="absolute top-3 left-3 z-10 pointer-events-none max-w-[50%]">
+            <div className="bg-gray-800/50 backdrop-blur-md rounded-lg px-3 py-1.5 flex items-center gap-2 overflow-hidden">
+              <span className="text-[10px] text-white/40 font-medium whitespace-nowrap flex-shrink-0">Problem</span>
+              <span className="text-[11px] text-white/70 truncate">{problem}</span>
+            </div>
           </div>
         )}
       </ReactFlow>
@@ -247,21 +278,28 @@ function Canvas({ problem, graphData, isQuerying, isDemo }) {
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty state — Bruno intro */}
       {!isQuerying && !graphData && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none select-none">
-          <div className="flex flex-col items-center gap-4 text-center px-8">
-            <div className="w-16 h-16 rounded-2xl bg-white border border-gray-100 shadow-sm flex items-center justify-center">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <path d="M21 21l-4.35-4.35" />
-              </svg>
+          <div className="flex flex-col items-center gap-5 text-center px-8 max-w-md">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-sky-400 shadow-lg shadow-blue-500/20 flex items-center justify-center">
+              <span className="text-white text-lg font-black tracking-tight">B</span>
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-500">No active session</p>
-              <p className="text-xs text-gray-400 mt-1 max-w-xs leading-relaxed">
-                Describe a machine problem in the left panel or say{' '}
-                <span className="text-blue-500 font-medium">"Hey Bruno"</span> to begin
+              <p className="text-base font-semibold text-gray-800">
+                Hi, I'm Bruno
+              </p>
+              <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                An intelligence by <span className="font-semibold text-gray-700">Tractian</span> helping{' '}
+                {isDemo
+                  ? <span className="font-semibold text-gray-700">Allinol</span>
+                  : <span className="font-semibold text-gray-700">your team</span>
+                }.
+                <br />
+                How can I assist you today?
+              </p>
+              <p className="text-xs text-gray-400 mt-3">
+                Say <span className="text-blue-500 font-medium">"Hey Bruno"</span> or describe a problem below
               </p>
             </div>
           </div>

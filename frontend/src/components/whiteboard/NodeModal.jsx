@@ -43,8 +43,11 @@ function PdfViewerModal({ url, onClose }) {
 }
 
 export default function NodeModal({ node, onClose }) {
-  const { type, data } = node
-  const [pdfOpen, setPdfOpen] = useState(false)
+  const { type, data, pdfMode } = node
+  const pdfUrl = pdfMode === 'relevant'
+    ? `${data.demoDocUrl}#page=73`
+    : data.demoDocUrl
+  const [pdfOpen, setPdfOpen] = useState(!!pdfMode)
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape' && !pdfOpen) onClose() }
@@ -296,8 +299,8 @@ export default function NodeModal({ node, onClose }) {
       </div>
     </div>
 
-    {pdfOpen && data.demoDocUrl && (
-      <PdfViewerModal url={data.demoDocUrl} onClose={() => setPdfOpen(false)} />
+    {pdfOpen && pdfUrl && (
+      <PdfViewerModal url={pdfUrl} onClose={() => setPdfOpen(false)} />
     )}
   </>
   )

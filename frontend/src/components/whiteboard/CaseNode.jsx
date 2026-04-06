@@ -11,7 +11,7 @@ export default function CaseNode({ data, selected }) {
 
   return (
     <>
-      <Handle type="source" position={Position.Left} className="case-handle" />
+      <Handle type="target" position={Position.Top} className="case-handle" />
 
       <div
         className={`case-node-card ${selected ? 'ring-2 ring-amber-400' : ''}`}

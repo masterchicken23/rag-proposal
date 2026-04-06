@@ -103,8 +103,8 @@ export function allinolDemoScenario(demoDocUrl = '') {
         },
       ],
       edges: [
-        dashedEdge('e-manual-action', 'manual-1', 'action-1'),
-        dashedEdge('e-case-action', 'case-1', 'action-1'),
+        dashedEdge('e-action-manual', 'action-1', 'manual-1'),
+        dashedEdge('e-action-case',   'action-1', 'case-1'),
         dashedEdge('e-action-device', 'action-1', 'device-1'),
       ],
     },
@@ -205,8 +205,8 @@ function overheatBeltScenario(problem) {
         },
       ],
       edges: [
-        dashedEdge('e-manual-action', 'manual-1', 'action-1'),
-        dashedEdge('e-case-action', 'case-1', 'action-1'),
+        dashedEdge('e-action-manual', 'action-1', 'manual-1'),
+        dashedEdge('e-action-case',   'action-1', 'case-1'),
         dashedEdge('e-action-device', 'action-1', 'device-1'),
       ],
     },
@@ -295,8 +295,8 @@ function bearingVibrationScenario(problem) {
         },
       ],
       edges: [
-        dashedEdge('e-manual-action', 'manual-1', 'action-1'),
-        dashedEdge('e-case-action', 'case-1', 'action-1'),
+        dashedEdge('e-action-manual', 'action-1', 'manual-1'),
+        dashedEdge('e-action-case',   'action-1', 'case-1'),
         dashedEdge('e-action-device', 'action-1', 'device-1'),
       ],
     },
@@ -385,8 +385,8 @@ function hydraulicLeakScenario(problem) {
         },
       ],
       edges: [
-        dashedEdge('e-manual-action', 'manual-1', 'action-1'),
-        dashedEdge('e-case-action', 'case-1', 'action-1'),
+        dashedEdge('e-action-manual', 'action-1', 'manual-1'),
+        dashedEdge('e-action-case',   'action-1', 'case-1'),
         dashedEdge('e-action-device', 'action-1', 'device-1'),
       ],
     },
